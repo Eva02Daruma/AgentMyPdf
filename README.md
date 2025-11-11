@@ -1,34 +1,195 @@
-# Cloudflare Workers OpenAPI 3.1
 
-This is a Cloudflare Worker with OpenAPI 3.1 using [chanfana](https://github.com/cloudflare/chanfana) and [Hono](https://github.com/honojs/hono).
+> **Agentic system for legal document compliance Q&A using Cloudflare Workers, AI, and RAG**
 
-This is an example project made to be used as a quick start into building OpenAPI compliant Workers that generates the
-`openapi.json` schema automatically from code and validates the incoming request to the defined parameters or request body.
+Este es un sistema agentico inteligente que puede leer y razonar sobre documentos legales , proporcionando respuestas precisas basadas en compliance y regulaciones.
 
-## Get started
+## 📑 Table of Contents
 
-1. Sign up for [Cloudflare Workers](https://workers.dev). The free tier is more than enough for most use cases.
-2. Clone this project and install dependencies with `npm install`
-3. Run `wrangler login` to login to your Cloudflare account in wrangler
-4. Run `wrangler deploy` to publish the API to Cloudflare Workers
+- [Architecture Overview](#-architecture-overview)
+- [Design Decisions](#-design-decisions)
+- [Data Extraction & RAG Pipeline](#-data-extraction--rag-pipeline)
+- [Model Usage](#-model-usage)
+- [Agent Architecture](#-agent-architecture)
+- [Getting Started](#-getting-started)
+- [Testing the Project](#-testing-the-project)
+- [API Endpoints](#-api-endpoints)
+- [Trade-offs & Considerations](#-trade-offs--considerations)
 
-## Project structure
+---
 
-1. Your main router is defined in `src/index.ts`.
-2. Each endpoint has its own file in `src/endpoints/`.
-3. For more information read the [chanfana documentation](https://chanfana.pages.dev/) and [Hono documentation](https://hono.dev/docs).
+## 🏗️ Architecture Overview
 
-## Development
+### High-Level System Design
 
-1. Run `wrangler dev` to start a local instance of the API.
-2. Open `http://localhost:8787/` in your browser to see the Swagger interface where you can try the endpoints.
-3. Changes made in the `src/` folder will automatically trigger the server to reload, you only need to refresh the Swagger interface.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        USER REQUEST                              │
+│                   POST /question {"question": "..."}             │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   CLOUDFLARE WORKER (Hono)                       │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  1. Validate Request                                    │    │
+│  │  2. Create runId                                        │    │
+│  │  3. Queue to IntelligentAgent (Durable Object)         │    │
+│  │  4. Return 202 Accepted + statusUrl                    │    │
+│  └────────────────────────────────────────────────────────┘    │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│           INTELLIGENT AGENT (Durable Object + Agents SDK)       │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  GUARDRAIL: Relevance Check                             │  │
+│  │  • LLM classifies if question is compliance-related     │  │
+│  │  • Rejects casual greetings, off-topic questions        │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│                           │                                      │
+│                           ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  RAG PIPELINE (Structured Reasoning)                    │  │
+│  │                                                           │  │
+│  │  PHASE 1: EXTRACTION                                     │  │
+│  │  └─ Tool: Text Embedding Generator                      │  │
+│  │     └─ Workers AI (@cf/baai/bge-base-en-v1.5)          │  │
+│  │                                                           │  │
+│  │  PHASE 2: SEARCH                                         │  │
+│  │  └─ Tool: Vector Similarity Search                      │  │
+│  │     └─ Vectorize (top-10 semantic search)              │  │
+│  │                                                           │  │
+│  │  PHASE 3: RETRIEVAL                                      │  │
+│  │  └─ Tool: Document Retriever                            │  │
+│  │     └─ D1 Database (structured docs + metadata)        │  │
+│  │                                                           │  │
+│  │  PHASE 4: GENERATION                                     │  │
+│  │  └─ Tool: LLM Answer Generator                          │  │
+│  │     └─ Workers AI (@cf/meta/llama-4-scout-17b...)      │  │
+│  │     └─ Chain-of-thought prompting                       │  │
+│  │                                                           │  │
+│  │  PHASE 5: EVALUATION                                     │  │
+│  │  └─ Quality checks (content, citations, relevance)      │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│                           │                                      │
+│                           ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  PERSISTENCE                                             │  │
+│  │  • Store in agent_runs table (D1)                       │  │
+│  │  • Track metrics, tools used, latency                   │  │
+│  │  • Update agent state                                   │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   USER POLLS STATUS                              │
+│              GET /status/:runId → returns answer                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-# AgentMyPdf
-Este proyecto es un API REST que te permite hacer preguntas QA a un llm rag .
+### Core Components
 
+1. **Cloudflare Worker (Hono)**: HTTP API layer
+2. **IntelligentAgent (Durable Object)**: Agentic processing with state management
+3. **Workers AI**: Embeddings + LLM inference
+4. **Vectorize**: Semantic vector search
+5. **D1 Database**: Document storage + run history
+6. **AI Gateway**: Observability and caching
 
-## 🚀 Endpoints
+---
+
+## 🎯 Design Decisions
+
+### 1. **Cloudflare Agents SDK over Custom Implementation**
+
+**Decision**: Use Cloudflare's official Agents SDK instead of building a custom agent system.
+
+**Rationale**:
+- ✅ Built-in state management with automatic persistence
+- ✅ RPC support for direct method calls
+- ✅ WebSocket integration for real-time updates
+- ✅ SQL storage integrated (no external DB needed)
+- ✅ Follows Cloudflare best practices
+
+**Implementation**: `IntelligentAgent` extends `Agent<Env, RAGAgentState>`
+
+### 2. **Durable Objects for Stateful Agent**
+
+**Decision**: Use Durable Objects to manage agent state and ensure consistency.
+
+**Rationale**:
+- ✅ Single instance ensures no race conditions
+- ✅ Built-in persistence (state survives restarts)
+- ✅ Co-location with data (SQL, state in same location)
+- ✅ Can run long operations without timeouts
+
+### 3. **Asynchronous Processing**
+
+**Decision**: Return immediately (202 Accepted) and process in background.
+
+**Rationale**:
+- ✅ Agent runs can take 10+ seconds
+- ✅ User doesn't need to keep connection open
+- ✅ Resilient to network issues
+- ✅ Can handle multiple requests concurrently
+
+**Implementation**:
+```typescript
+// POST /question returns immediately
+{ "runId": "...", "statusUrl": "/status/run-xxx" }
+
+// Agent processes in background using ctx.waitUntil
+await agent.processQuestion({ question, runId });
+```
+
+### 4. **Guardrails for Compliance Focus**
+
+**Decision**: Add LLM-based relevance filter before RAG pipeline.
+
+**Rationale**:
+- ✅ Prevents hallucinations on irrelevant questions
+- ✅ Saves compute (no embedding/search for "Hello")
+- ✅ Clear user feedback for off-topic questions
+- ✅ Aligns with compliance Q&A purpose
+
+**Implementation**:
+- Uses separate LLM call with binary classification
+- Low temperature (0.1) for consistent filtering
+- Fast response (~500ms)
+
+### 5. **Structured Reasoning with Tool Tracking**
+
+**Decision**: Explicit phases with tool usage metrics.
+
+**Rationale**:
+- ✅ Observable reasoning process
+- ✅ Easy to debug which phase failed
+- ✅ Metrics for optimization
+- ✅ Matches interview requirements
+
+**Phases**:
+1. **Guardrail**: Relevance Check (optional)
+2. **Extraction**: Generate question embedding
+3. **Search**: Vector similarity in Vectorize
+4. **Retrieval**: Fetch full documents from D1
+5. **Generation**: LLM answer with chain-of-thought
+6. **Evaluation**: Quality assessment
+
+### 6. **Chain-of-Thought Prompting**
+
+**Decision**: Structured prompts following Cloudflare best practices.
+
+**Rationale**:
+- ✅ Better reasoning quality
+- ✅ Explicit citation requirements
+- ✅ Metadata context (relevance scores)
+- ✅ Output format specification
+
+---
+
+## 📊 Data Extraction & RAG Pipeline
 
 ### 1. POST /question
 Crea una nueva pregunta para el agente. Retorna un `runId` para tracking.
