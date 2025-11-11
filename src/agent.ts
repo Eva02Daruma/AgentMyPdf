@@ -7,12 +7,6 @@ import { Agent } from "agents";
 // ============================================================================
 
 /**
- * Model ID for Workers AI
- * @see https://developers.cloudflare.com/workers-ai/models/
- */
-export const MODEL_ID = "@cf/meta/llama-4-scout-17b-16e-instruct";
-
-/**
  * AI Gateway configuration
  */
 const GATEWAY_ID = "agentmypdf";
@@ -35,7 +29,7 @@ export interface AgentRun {
 
 
 const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
-const TEXT_GENERATION_MODEL = "@cf/meta/llama-3-8b-instruct";
+const TEXT_GENERATION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 
 
 

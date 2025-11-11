@@ -6,8 +6,6 @@ import type { Env } from "./types";
 // ============================================================================
 
 const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
-const TEXT_GENERATION_MODEL = "@cf/meta/llama-3-8b-instruct";
-const CHUNK_SIZE = 1000; // Characters per chunk
 const GATEWAY_ID = "agentmypdf";
 
 // ============================================================================
