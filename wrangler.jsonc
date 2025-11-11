@@ -7,10 +7,6 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"name": "MyAgent",
-				"class_name": "MyAgent",
-			},
-			{
 				"name": "AgentWebSocket",
 				"class_name": "AgentWebSocket",
 			},
@@ -22,23 +18,9 @@
 	},
 	"migrations": [
 		{
-			"tag": "v1",
-			"new_sqlite_classes": [
-				"MyAgent"
-			],
-		},
-		{
-			"tag": "v2",
-			"new_sqlite_classes": [
-				"AgentWebSocket"
-			],
-		},
-		{
-			"tag": "v3",
-			"new_sqlite_classes": [
-				"IntelligentAgent"
-			],
-		},
+			"tag": "v4",
+			"new_sqlite_classes": ["IntelligentAgent"]
+		}
 	],
 	"ai": {
 		"binding": "AI",

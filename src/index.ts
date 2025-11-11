@@ -3,8 +3,8 @@ import { Hono } from "hono";
 import type { Env } from "./types";
 
 // Export Durable Objects, Agent, and Workflow
-export { MyAgent } from "./agent";
-export { IntelligentAgent } from "./agent copy";
+
+export { IntelligentAgent } from "./agent";
 export { RAGWorkflow } from "./workflow";
 export { AgentWebSocket } from "./websocket";
 
