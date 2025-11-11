@@ -1,9 +1,11 @@
 import { fromHono } from "chanfana";
 import { Hono } from "hono";
-import { TaskCreate } from "./endpoints/taskCreate";
-import { TaskDelete } from "./endpoints/taskDelete";
-import { TaskFetch } from "./endpoints/taskFetch";
-import { TaskList } from "./endpoints/taskList";
+import type { Env } from "./types";
+
+// Export Durable Object and Workflow
+export { MyAgent } from "./agent";
+export { RAGWorkflow } from "./workflow";
+export { AgentWebSocket } from "./websocket";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -13,14 +15,245 @@ const openapi = fromHono(app, {
 	docs_url: "/",
 });
 
-// Register OpenAPI endpoints
-openapi.get("/api/tasks", TaskList);
-openapi.post("/api/tasks", TaskCreate);
-openapi.get("/api/tasks/:taskSlug", TaskFetch);
-openapi.delete("/api/tasks/:taskSlug", TaskDelete);
+// ============================================================================
+// RAG ENDPOINTS
+// ============================================================================
 
-// You may also register routes for non OpenAPI directly on Hono
-// app.get('/test', (c) => c.text('Hono!'))
+/**
+ * POST /question - Create a new agent question
+ * This is the main endpoint for the compliance Q&A agent
+ */
+app.post("/question", async (c) => {
+	try {
+		const body = await c.req.json<{ question: string }>();
+		
+		if (!body.question) {
+			return c.json({
+				success: false,
+				error: "Question is required"
+			}, 400);
+		}
+
+		// Get the Durable Object instance
+		const id = c.env.MyAgent.idFromName("compliance-agent");
+		const stub = c.env.MyAgent.get(id);
+		
+		// Create agent run
+		const response = await stub.fetch("http://internal/run", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ question: body.question }),
+		});
+		
+		return new Response(response.body, {
+			status: response.status,
+			headers: { "Content-Type": "application/json" },
+		});
+	} catch (error) {
+		return c.json({
+			success: false,
+			error: error instanceof Error ? error.message : "Unknown error"
+		}, 500);
+	}
+});
+
+/**
+ * GET /status/:runId - Get the status of an agent run
+ */
+app.get("/status/:runId", async (c) => {
+	try {
+		const runId = c.req.param("runId");
+		
+		// Get the Durable Object instance
+		const id = c.env.MyAgent.idFromName("compliance-agent");
+		const stub = c.env.MyAgent.get(id);
+		
+		// Get run status
+		const response = await stub.fetch(`http://internal/status/${runId}`, {
+			method: "GET",
+		});
+		
+		return new Response(response.body, {
+			status: response.status,
+			headers: { "Content-Type": "application/json" },
+		});
+	} catch (error) {
+		return c.json({
+			success: false,
+			error: error instanceof Error ? error.message : "Unknown error"
+		}, 500);
+	}
+});
+
+/**
+ * POST /seed - Seed knowledge base with documents
+ * Upload documents to the vector database
+ */
+app.post("/seed", async (c) => {
+	try {
+		const body = await c.req.json<{ text: string; source: string }>();
+		
+		if (!body.text || !body.source) {
+			return c.json({
+				success: false,
+				error: "Text and source are required"
+			}, 400);
+		}
+
+		// Store in D1 and Vectorize
+		const query = "INSERT INTO documents (text, source) VALUES (?, ?) RETURNING *";
+		const { results } = await c.env.database.prepare(query)
+			.bind(body.text, body.source)
+			.run();
+
+		const record = results?.[0];
+		if (!record) {
+			throw new Error("Failed to create document");
+		}
+
+		// Generate embedding
+		const embeddings = await c.env.AI.run(
+			"@cf/baai/bge-base-en-v1.5",
+			{
+				text: body.text,
+			},
+			{
+				gateway: {
+					id: "agentmypdf"
+				}
+			}
+		);
+
+		const values = (embeddings as any).data?.[0];
+		if (!values) {
+			throw new Error("Failed to generate embedding");
+		}
+
+		// Insert into Vectorize
+		await c.env.VECTORIZE.upsert([
+			{
+				id: (record as any).id.toString(),
+				values: values,
+				metadata: {
+					source: body.source,
+					text: body.text.substring(0, 500),
+				},
+			},
+		]);
+
+		return c.json({
+			success: true,
+			documentId: (record as any).id,
+			message: "Document indexed successfully",
+		});
+	} catch (error) {
+		return c.json({
+			success: false,
+			error: error instanceof Error ? error.message : "Unknown error"
+		}, 500);
+	}
+});
+
+/**
+ * GET /ws-client - Serve WebSocket test client
+ */
+app.get("/ws-client", async (c) => {
+	const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent WebSocket Client</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: white; text-align: center; margin-bottom: 30px; font-size: 2.5em; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .panel { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .panel h2 { color: #667eea; margin-bottom: 20px; font-size: 1.5em; }
+        textarea { width: 100%; min-height: 120px; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; }
+        button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+        .messages { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 8px; padding: 15px; max-height: 400px; overflow-y: auto; font-family: monospace; }
+        .message { margin-bottom: 10px; padding: 8px; border-radius: 4px; border-left: 4px solid #667eea; background: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 Agent WebSocket Client</h1>
+        <div class="grid">
+            <div class="panel">
+                <h2>Create Question</h2>
+                <textarea id="question" placeholder="Enter your legal question...">Si tengo una empresa de software medioambiental para salmoneras, en el sur de chile, que sugerencias tienes de como puedo cumplir con la ley de protección de datos personales?</textarea>
+                <button onclick="createQuestion()">Send Question</button>
+            </div>
+            <div class="panel">
+                <h2>Messages</h2>
+                <div class="messages" id="messages"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let ws = null;
+        function addMessage(content) {
+            document.getElementById('messages').innerHTML += '<div class="message">' + content + '</div>';
+        }
+        window.addEventListener('load', () => {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = protocol + '//' + window.location.host + '/ws';
+            ws = new WebSocket(wsUrl);
+            ws.onopen = () => {
+                addMessage('✅ Connected to WebSocket');
+                // Auto-subscribe to ALL runs for testing
+                ws.send(JSON.stringify({ type: 'subscribe', runId: 'all' }));
+                addMessage('🌐 Auto-subscribed to ALL runs (testing mode)');
+            };
+            ws.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'run_update') {
+                    addMessage('📢 [' + data.runId + '] ' + data.update.status + ' - ' + (data.update.step || 'processing'));
+                    if (data.update.result) addMessage('✅ Result: ' + data.update.result.substring(0, 200) + '...');
+                } else if (data.type === 'subscribed') {
+                    addMessage('✓ Subscribed to: ' + data.runId);
+                }
+            };
+        });
+        async function createQuestion() {
+            const q = document.getElementById('question').value;
+            const res = await fetch('/question', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: q}) });
+            const data = await res.json();
+            if (data.success) {
+                addMessage('🚀 Question created: ' + data.runId);
+                addMessage('⏳ Waiting for updates... (already subscribed to all runs)');
+            }
+        }
+    </script>
+</body>
+</html>`;
+	return c.html(html);
+});
+
+/**
+ * GET /ws - WebSocket endpoint for real-time agent updates
+ * Clients connect here to receive real-time progress updates
+ */
+app.get("/ws", async (c) => {
+	// Check for WebSocket upgrade
+	const upgradeHeader = c.req.header("Upgrade");
+	if (!upgradeHeader || upgradeHeader !== "websocket") {
+		return c.json({
+			success: false,
+			error: "Expected Upgrade: websocket header"
+		}, 426);
+	}
+
+	// Get WebSocket Durable Object (using singleton pattern)
+	const id = c.env.AgentWebSocket.idFromName("websocket-server");
+	const stub = c.env.AgentWebSocket.get(id);
+
+	// Forward the upgrade request to the Durable Object
+	return stub.fetch(c.req.raw);
+});
 
 // Export the Hono app
 export default app;

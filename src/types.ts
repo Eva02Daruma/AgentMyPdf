@@ -1,13 +1,28 @@
-import { DateTime, Str } from "chanfana";
 import type { Context } from "hono";
-import { z } from "zod";
+
+
+// Environment bindings for the Worker
+export interface Env {
+  AI: Ai;
+  database: D1Database;
+  VECTORIZE: VectorizeIndex;
+  MyAgent: DurableObjectNamespace;
+  AgentWebSocket: DurableObjectNamespace;
+}
 
 export type AppContext = Context<{ Bindings: Env }>;
 
-export const Task = z.object({
-	name: Str({ example: "lorem" }),
-	slug: Str(),
-	description: Str({ required: false }),
-	completed: z.boolean().default(false),
-	due_date: DateTime(),
-});
+
+// Document types for RAG
+export interface Document {
+	id: number;
+	text: string;
+	source: string;
+	created_at: string;
+}
+
+export interface Vector {
+	id: string;
+	values: number[];
+	metadata?: Record<string, any>;
+}

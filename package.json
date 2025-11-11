@@ -3,19 +3,28 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "deploy": "wrangler deploy",
     "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest",
+    "type-check": "tsc --noEmit",
+    "db:init": "wrangler d1 execute database --local --file=schema.sql",
+    "db:init:remote": "wrangler d1 execute database --remote --file=schema.sql",
+    "seed": "tsx scripts/seed-documents.ts",
+    "debug:chunk": "tsx scripts/debug-chunk.ts",
     "start": "wrangler dev",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "agents": "^0.2.21",
     "chanfana": "^2.6.3",
-    "hono": "^4.6.20",
+    "hono": "^4.10.4",
+    "pdf-parse": "^2.4.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "22.13.0",
     "@types/service-worker-mock": "^2.0.4",
+    "tsx": "^4.20.6",
     "wrangler": "^4.46.0"
   }
 }
