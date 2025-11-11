@@ -2,8 +2,9 @@ import { fromHono } from "chanfana";
 import { Hono } from "hono";
 import type { Env } from "./types";
 
-// Export Durable Object and Workflow
+// Export Durable Objects, Agent, and Workflow
 export { MyAgent } from "./agent";
+export { IntelligentAgent } from "./agent copy";
 export { RAGWorkflow } from "./workflow";
 export { AgentWebSocket } from "./websocket";
 
@@ -20,8 +21,17 @@ const openapi = fromHono(app, {
 // ============================================================================
 
 /**
- * POST /question - Create a new agent question
- * This is the main endpoint for the compliance Q&A agent
+ * POST /question - Create a new agent question (ASYNCHRONOUS)
+ * 
+ * This is the main endpoint for the compliance Q&A agent.
+ * Uses IntelligentAgent with Cloudflare Agents SDK.
+ * 
+ * Flow:
+ * 1. Request is received and validated
+ * 2. Agent is queued to run asynchronously
+ * 3. RunId is returned immediately
+ * 4. Agent continues running even if connection drops
+ * 5. Use GET /question/:runId to check progress/results
  */
 app.post("/question", async (c) => {
 	try {
@@ -34,22 +44,31 @@ app.post("/question", async (c) => {
 			}, 400);
 		}
 
-		// Get the Durable Object instance
-		const id = c.env.MyAgent.idFromName("compliance-agent");
-		const stub = c.env.MyAgent.get(id);
+		// Get IntelligentAgent singleton instance
+		const agentId = c.env.INTELLIGENT_AGENT.idFromName("compliance-agent");
+		const agent = c.env.INTELLIGENT_AGENT.get(agentId) as any;
 		
-		// Create agent run
-		const response = await stub.fetch("http://internal/run", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ question: body.question }),
-		});
+		// Generate unique run ID
+		const runId = `run-${crypto.randomUUID()}`;
 		
-		return new Response(response.body, {
-			status: response.status,
-			headers: { "Content-Type": "application/json" },
+		// Queue the question to run asynchronously using Durable Object RPC
+		// This calls the processQuestion method directly which queues internally
+		// The agent continues running even if connection drops
+		await agent.processQuestion({
+			question: body.question,
+			runId: runId
 		});
+
+		return c.json({
+			success: true,
+			runId: runId,
+			status: "running",
+			message: "Agent run created and processing in background. Use GET /status/:runId to check progress.",
+			statusUrl: `/status/${runId}`
+		}, 202); // 202 Accepted - async processing
+
 	} catch (error) {
+		console.error("❌ Error creating agent run:", error);
 		return c.json({
 			success: false,
 			error: error instanceof Error ? error.message : "Unknown error"
@@ -58,7 +77,81 @@ app.post("/question", async (c) => {
 });
 
 /**
- * GET /status/:runId - Get the status of an agent run
+ * GET /status/:runId - Get the status and result of an agent run
+ * 
+ * Returns the current state and result (if completed) of a question run.
+ * This endpoint can be polled to check progress.
+ */
+app.get("/status/:runId", async (c) => {
+	try {
+		const runId = c.req.param("runId");
+		
+		// Get IntelligentAgent singleton instance
+		const agentId = c.env.INTELLIGENT_AGENT.idFromName("compliance-agent");
+		const agent = c.env.INTELLIGENT_AGENT.get(agentId) as any;
+		
+		// Get history using direct RPC call
+		const historyData = await agent.getHistory(100); // Get last 100 runs
+		
+		if (historyData.error) {
+			console.error("Error getting history:", historyData.error);
+		}
+		
+		const run = historyData.runs?.find((r: any) => r.id === runId);
+
+		if (!run) {
+			// Check if it's in current state (might be still running)
+			const status = await agent.getStatus();
+			if (status.state.lastRunId === runId) {
+				return c.json({
+					success: true,
+					runId: runId,
+					question: status.state.lastQuestion,
+					status: status.state.lastRunStatus || 'running',
+					documentsUsed: status.state.documentsRetrieved || 0,
+					message: "Run is still in progress. Please check again later."
+				});
+			}
+			
+			return c.json({
+				success: false,
+				error: "Run not found. It may not have started yet or the runId is invalid."
+			}, 404);
+		}
+
+		// Return full run data with metrics
+		return c.json({
+			success: true,
+			runId: run.id,
+			question: run.question,
+			answer: run.answer,
+			documentsUsed: run.documents_used,
+			status: run.status,
+			toolsUsed: run.tools_used || [],
+			toolCallCount: run.tool_call_count || 0,
+			latencyMs: run.latency_ms || 0,
+			createdAt: run.created_at,
+			completedAt: run.completed_at,
+			duration: run.completed_at ? (run.completed_at - run.created_at) / 1000 : null,
+			metrics: {
+				latency: `${run.latency_ms || 0}ms`,
+				toolsUsed: run.tools_used || [],
+				toolCallCount: run.tool_call_count || 0,
+				documentsRetrieved: run.documents_used || 0
+			}
+		});
+
+	} catch (error) {
+		console.error("❌ Error getting question status:", error);
+		return c.json({
+			success: false,
+			error: error instanceof Error ? error.message : "Unknown error"
+		}, 500);
+	}
+});
+
+/**
+ * GET /status/:runId - Get the status of an agent run (OLD - kept for compatibility)
  */
 app.get("/status/:runId", async (c) => {
 	try {

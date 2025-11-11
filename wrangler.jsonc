@@ -14,6 +14,10 @@
 				"name": "AgentWebSocket",
 				"class_name": "AgentWebSocket",
 			},
+			{
+				"name": "INTELLIGENT_AGENT",
+				"class_name": "IntelligentAgent",
+			},
 		],
 	},
 	"migrations": [
@@ -29,6 +33,12 @@
 				"AgentWebSocket"
 			],
 		},
+		{
+			"tag": "v3",
+			"new_sqlite_classes": [
+				"IntelligentAgent"
+			],
+		},
 	],
 	"ai": {
 		"binding": "AI",
@@ -38,6 +48,7 @@
 	"name": "agentmypdf",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-11-09",
+	"compatibility_flags": ["nodejs_compat"],
 	"observability": {
 		"enabled": true,
 	},

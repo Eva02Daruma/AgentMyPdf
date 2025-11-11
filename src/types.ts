@@ -8,6 +8,7 @@ export interface Env {
   VECTORIZE: VectorizeIndex;
   MyAgent: DurableObjectNamespace;
   AgentWebSocket: DurableObjectNamespace;
+  INTELLIGENT_AGENT: DurableObjectNamespace;
 }
 
 export type AppContext = Context<{ Bindings: Env }>;
