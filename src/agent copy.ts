@@ -570,7 +570,7 @@ Respuesta:`;
         messages: [
           { 
             role: "system", 
-            content: "Eres un asistente experto en leyes chilenas. Responde basándote EXCLUSIVAMENTE en los documentos proporcionados y SIEMPRE cita las fuentes." 
+            content: "Eres un asistente experto en Aseguramiento de calidad QA. Tu deber es usar la informacion para asegurar el control de calidad. Responde basándote EXCLUSIVAMENTE en los documentos proporcionados y SIEMPRE cita las fuentes." 
           },
           { role: "user", content: prompt }
         ],
@@ -598,9 +598,9 @@ Respuesta:`;
       `DOCUMENTO ${idx + 1}:\n${doc}`
     ).join("\n\n---\n\n");
 
-    return `A continuación se presentan fragmentos de leyes chilenas. Responde la pregunta basándote EXCLUSIVAMENTE en estos documentos.
+    return `A continuación se presentan fragmentos de documentos. Responde la pregunta basándote EXCLUSIVAMENTE en los documentos proporcionados.
 
-=== DOCUMENTOS LEGALES ===
+=== DOCUMENTOS ===
 ${formattedDocs}
 
 === PREGUNTA ===
@@ -608,7 +608,7 @@ ${question}
 
 === INSTRUCCIONES ===
 1. DEBES citar la fuente específica [Fuente: ...] para cada afirmación
-2. Si mencionas un artículo, indica de qué ley proviene
+2. Si mencionas un artículo, indica de qué documento proviene
 3. Proporciona recomendaciones prácticas y específicas
 4. Si los documentos no tienen suficiente información, dilo explícitamente
 5. Sé conciso pero completo

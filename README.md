@@ -23,8 +23,9 @@ This is an example project made to be used as a quick start into building OpenAP
 1. Run `wrangler dev` to start a local instance of the API.
 2. Open `http://localhost:8787/` in your browser to see the Swagger interface where you can try the endpoints.
 3. Changes made in the `src/` folder will automatically trigger the server to reload, you only need to refresh the Swagger interface.
+
 # AgentMyPdf
-Este proyecto es un API REST que te permite hacer preguntas a un llm rag .
+Este proyecto es un API REST que te permite hacer preguntas QA a un llm rag .
 
 
 ## 🚀 Endpoints
