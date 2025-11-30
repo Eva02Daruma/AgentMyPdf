@@ -43,13 +43,11 @@ app.post("/question", async (c) => {
 				error: "Question is required"
 			}, 400);
 		}
-
-		// Get IntelligentAgent singleton instance
-		const agentId = c.env.INTELLIGENT_AGENT.idFromName("compliance-agent");
-		const agent = c.env.INTELLIGENT_AGENT.get(agentId) as any;
-		
 		// Generate unique run ID
 		const runId = `run-${crypto.randomUUID()}`;
+		// Get IntelligentAgent singleton instance
+		const agentId = c.env.INTELLIGENT_AGENT.idFromName(runId);
+		const agent = c.env.INTELLIGENT_AGENT.get(agentId) as any;
 		
 		// Queue the question to run asynchronously using Durable Object RPC
 		// This calls the processQuestion method directly which queues internally
@@ -86,8 +84,9 @@ app.get("/status/:runId", async (c) => {
 	try {
 		const runId = c.req.param("runId");
 		
-		// Get IntelligentAgent singleton instance
-		const agentId = c.env.INTELLIGENT_AGENT.idFromName("compliance-agent");
+		// Get IntelligentAgent instance for this specific run
+		// Since we create a new agent per run in POST /question, we must access the same one here
+		const agentId = c.env.INTELLIGENT_AGENT.idFromName(runId);
 		const agent = c.env.INTELLIGENT_AGENT.get(agentId) as any;
 		
 		// Get history using direct RPC call
@@ -143,34 +142,6 @@ app.get("/status/:runId", async (c) => {
 
 	} catch (error) {
 		console.error("❌ Error getting question status:", error);
-		return c.json({
-			success: false,
-			error: error instanceof Error ? error.message : "Unknown error"
-		}, 500);
-	}
-});
-
-/**
- * GET /status/:runId - Get the status of an agent run (OLD - kept for compatibility)
- */
-app.get("/status/:runId", async (c) => {
-	try {
-		const runId = c.req.param("runId");
-		
-		// Get the Durable Object instance
-		const id = c.env.MyAgent.idFromName("compliance-agent");
-		const stub = c.env.MyAgent.get(id);
-		
-		// Get run status
-		const response = await stub.fetch(`http://internal/status/${runId}`, {
-			method: "GET",
-		});
-		
-		return new Response(response.body, {
-			status: response.status,
-			headers: { "Content-Type": "application/json" },
-		});
-	} catch (error) {
 		return c.json({
 			success: false,
 			error: error instanceof Error ? error.message : "Unknown error"

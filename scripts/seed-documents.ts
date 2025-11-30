@@ -18,29 +18,9 @@ const CHUNK_SIZE = 600; // Tamaño de cada chunk en caracteres (reducido para ev
 
 const DOCUMENTS = [
 	{
-		name: "Ley 19.886 - Compras Públicas",
-		url: "https://pub-0e0e9ca0d502436bbf25ba03d6046c82.r2.dev/Ley-19886.pdf",
-		source: "Ley-19886"
-	},
-	{
-		name: "Ley 19.496 - Protección de los Consumidores",
-		url: "https://pub-0e0e9ca0d502436bbf25ba03d6046c82.r2.dev/Ley-19496.pdf",
-		source: "Ley-19496"
-	},
-	{
-		name: "Ley 20.393 - Responsabilidad Penal de Personas Jurídicas",
-		url: "https://pub-0e0e9ca0d502436bbf25ba03d6046c82.r2.dev/Ley-20393.pdf",
-		source: "Ley-20393"
-	},
-	{
-		name: "Ley 19.913 - UAF",
-		url: "https://pub-0e0e9ca0d502436bbf25ba03d6046c82.r2.dev/Ley-19913.pdf",
-		source: "Ley-19913"
-	},
-	{
-		name: "Ley 21.521 - Fintec",
-		url: "https://pub-0e0e9ca0d502436bbf25ba03d6046c82.r2.dev/Ley-21521.pdf",
-		source: "Ley-21521"
+		name: "PLACEHOLDER",
+		url: "https://www.google.com",
+		source: "Placeholder"
 	}
 ];
 

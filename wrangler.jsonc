@@ -14,12 +14,14 @@
 				"name": "INTELLIGENT_AGENT",
 				"class_name": "IntelligentAgent",
 			},
+
 		],
 	},
 	"migrations": [
 		{
-			"tag": "v4",
-			"new_sqlite_classes": ["IntelligentAgent"]
+			"tag": "v5",
+			"new_sqlite_classes": ["IntelligentAgent"],
+			"new_classes": ["AgentWebSocket"]
 		}
 	],
 	"ai": {

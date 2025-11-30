@@ -309,3 +309,10 @@ En lugar de hacer polling constante a `/status/:runId`, puedes **suscribirte via
   }
 }
 ```
+
+# Como cargar documentos en Seed 
+Hay 2 Opciones : 
+
+1. Usando el script seed-documents.ts
+2. Usando el endpoint /seed
+
